@@ -9,9 +9,11 @@ output: html_notebook
 pkg <- c("dplyr",
          "RSQLite",
          "tidyr",
-         "DBI")
+         "DBI",
+         "e1071",
+         "rpart")
 
-pkg_load <- lapply(pkg, require, character.only = T)
+pkg_load <- lapply(pkg, require, character.only = T, quietly = TRUE)
 
 # connect to the db
 conn <- dbConnect(drv = RSQLite::SQLite(),
@@ -24,5 +26,56 @@ for (i in seq_along(tbl_list)){
     assign(tbl_list[i], dbGetQuery(conn, paste("select * from", tbl_list[i])))
 }
 
+# Combine Country and League
+LeagueInfo <- full_join(League, Country, by = c("id")) %>% 
+    setNames(c("league.id", "country.id", "league.name", "country.name"))
+
+
+
+
+# rm(list = c("League", "Country", "sqlite_sequence"))
 ```
+
+Exploratory Data Analysis on Match Data Set
+
+```{r}
+rowSums(Match %>% is.na())
+
+col_player <- Match %>% 
+    colnames %>%
+    grep("player", x = ., ignore.case = T, value = T)
+
+col_stat <- Match %>% 
+    select(goal:possession) %>%
+    colnames
+
+col_ratio <- Match %>% 
+    select(B365H:BSA) %>%
+    colnames
+
+temp <- Match[rowSums(is.na(Match[,col_ratio]))==0,] %>% 
+    select(-one_of(col_stat)) %>%
+    select(-one_of(col_player)) %>% select(-1,-4,-6,-7,-10, -11) %>% select(-(1:5))
+#temp[,1:5] <- lapply(temp[,1:5], factor)
+
+
+x <- temp %>% select(-outcome)
+y <- temp$outcome %>% as.factor()
+
+model <- svm(outcome ~ ., data = temp, gamma = 1, cost = 2, type="C-classification")
+
+# Solution Set
+sol <- read.csv("data/solution_set.csv", header = T)
+sol_set <- sol %>% 
+    select(-one_of(col_stat)) %>% 
+    select(-one_of(col_player)) %>% 
+    select(-(1:9))
+
+#cn <- colnames(sol_set[,1:5])
+#sol_set[,1:5] <- lapply(sol_set[,1:5], factor)
+
+pred <- predict(model, sol_set)
+
+```
+
 
