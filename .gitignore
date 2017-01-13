@@ -1,0 +1,8 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+data/database.sqlite
+data/solution_set.csv
+FI_Kaggle_Soccer.Rproj
+*.html

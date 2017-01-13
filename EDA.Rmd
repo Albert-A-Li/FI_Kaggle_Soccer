@@ -1,0 +1,28 @@
+---
+title: "FI Soccer Kaggle Competition"
+output: html_notebook
+---
+
+### Explortory Data Analysis
+
+```{r}
+pkg <- c("dplyr",
+         "RSQLite",
+         "tidyr",
+         "DBI")
+
+pkg_load <- lapply(pkg, require, character.only = T)
+
+# connect to the db
+conn <- dbConnect(drv = RSQLite::SQLite(),
+                        dbname = "data/database.sqlite")
+#list tables
+tbl_list <- db_list_tables(conn)
+
+# query tables
+for (i in seq_along(tbl_list)){
+    assign(tbl_list[i], dbGetQuery(conn, paste("select * from", tbl_list[i])))
+}
+
+```
+
