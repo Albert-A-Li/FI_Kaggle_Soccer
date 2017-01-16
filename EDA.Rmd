@@ -2,16 +2,16 @@
 title: "FI Soccer Kaggle Competition"
 output: html_notebook
 ---
-
 ### Explortory Data Analysis
-
 ```{r}
 pkg <- c("dplyr",
          "RSQLite",
          "tidyr",
          "DBI",
          "e1071",
-         "rpart")
+         "rpart",
+         "glmnet",
+         "plotly")
 
 pkg_load <- lapply(pkg, require, character.only = T, quietly = TRUE)
 
@@ -30,10 +30,7 @@ for (i in seq_along(tbl_list)){
 LeagueInfo <- full_join(League, Country, by = c("id")) %>% 
     setNames(c("league.id", "country.id", "league.name", "country.name"))
 
-
-
-
-# rm(list = c("League", "Country", "sqlite_sequence"))
+rm(list = c("League", "Country", "sqlite_sequence"))
 ```
 
 Exploratory Data Analysis on Match Data Set
@@ -41,40 +38,87 @@ Exploratory Data Analysis on Match Data Set
 ```{r}
 rowSums(Match %>% is.na())
 
-col_player <- Match %>% 
+var_player <- Match %>% 
     colnames %>%
     grep("player", x = ., ignore.case = T, value = T)
 
-col_stat <- Match %>% 
+var_stat <- Match %>% 
     select(goal:possession) %>%
     colnames
 
-col_ratio <- Match %>% 
+var_ratio <- Match %>% 
     select(B365H:BSA) %>%
     colnames
 
-temp <- Match[rowSums(is.na(Match[,col_ratio]))==0,] %>% 
-    select(-one_of(col_stat)) %>%
-    select(-one_of(col_player)) %>% select(-1,-4,-6,-7,-10, -11) %>% select(-(1:5))
-#temp[,1:5] <- lapply(temp[,1:5], factor)
+var_match_info <- Match %>%
+    select(1:7) %>%
+    colnames
+
+train <- Match %>%
+    select(-one_of(var_player),
+           -one_of(var_stat),
+           -one_of(var_match_info))
+
+colSums(train %>% is.na())
+
+for(i in unique(train$home_team_api_id)) {
+#    train[paste("home",i,sep="_")] <- ifelse(train$home_team_api_id == i, 1, 0)
+}
+
+for(i in unique(train$away_team_api_id)) {
+#    train[paste("away",i,sep="_")] <- ifelse(train$away_team_api_id == i, 1, 0)
+}
+
+train <- train %>% 
+    select(-home_team_api_id, -away_team_api_id) %>%
+    select(-home_team_goal, -away_team_goal) %>%
+    select(-(GBH:BSA)) %>%
+    select(-(PSH:PSA)) %>%
+    select(-(SJH:SJA)) %>%
+    .[complete.cases(.),] 
+
+train$outcome <- train$outcome %>% factor()
+
+colSums(train %>% is.na()) %>% sum()
 
 
-x <- temp %>% select(-outcome)
-y <- temp$outcome %>% as.factor()
 
-model <- svm(outcome ~ ., data = temp, gamma = 1, cost = 2, type="C-classification")
+model_linear <- svm(outcome ~ . , data = train, type = "C-classification", kernel = "linear")
+model_poly <- svm(outcome ~ . , data = train, type = "C-classification", kernel = "polynomial")
+model_sigmoid <- svm(outcome ~ . , data = train, type = "C-classification", kernel = "sigmoid")
+```
+Read solution set
 
-# Solution Set
-sol <- read.csv("data/solution_set.csv", header = T)
-sol_set <- sol %>% 
-    select(-one_of(col_stat)) %>% 
-    select(-one_of(col_player)) %>% 
-    select(-(1:9))
+```{r}
+test <- train %>% slice(1:200) %>% select(-outcome)
+test_outcome <- train %>% slice(1:200) %>% select(outcome) %>% unlist
 
-#cn <- colnames(sol_set[,1:5])
-#sol_set[,1:5] <- lapply(sol_set[,1:5], factor)
+pred_linear <- predict(model_linear, test)
+sum(pred_linear == test_outcome)
 
-pred <- predict(model, sol_set)
+pred_sigmoid <- predict(model_sigmoid, test)
+sum(pred_sigmoid == test_outcome)
+
+pred_poly <- predict(model_poly, test)
+sum(pred_poly == test_outcome)
+
+
+```
+logistic regression
+```{r}
+
+y = train$outcome %>% as.matrix()
+x = train %>% select(-outcome) %>% as.matrix()
+
+model_logit <- cv.glmnet(x, y, family="multinomial", alpha = 0)
+model_logit$lambda.1se
+
+model_logit_final <- model_logit$glmnet.fit
+
+pred_logit <- predict(model_logit_final,newx=test %>% as.matrix(),s=model_logit$lambda.1se,type='class')
+sum(pred_logit == test_outcome)
+
+
 
 ```
 
