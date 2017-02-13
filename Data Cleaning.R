@@ -73,19 +73,11 @@ Player <- raw_Player %>%
     select(-id,
            -player_fifa_api_id)
 
-
-
-
-
-
-
-
-
 # </Clean Player Data>----------------------------------------------------------------------------------------------
 
 # <Clean Match Data>------------------------------------------------------------------------------------------------
 col_position <- colnames(raw_Match) %>%
-    grep("player_X|player_Y", x = ., ignore.case = T, value = T)
+    grep("player_", x = ., ignore.case = T, value = T)
 
 Match <- raw_Match %>%
     select(-(home_team_goal:away_team_goal)) %>%
@@ -93,8 +85,8 @@ Match <- raw_Match %>%
     select(-one_of(col_position)) %>%
     select(-(GBH:BSA)) %>%
     select(-(PSH:PSA)) %>%
-    select(-(SJH:SJA)) %>%
-    .[complete.cases(.),]
+    select(-(SJH:SJA)) #%>%
+    #.[complete.cases(.),]
 
 Match$date <- Match$date %>% as.Date()
 # </Clean Player Data>-----------------------------------------------------------------------------------------------
@@ -102,49 +94,51 @@ Match$date <- Match$date %>% as.Date()
 # <Join Team data to Match>------------------------------------------------------------------------------------------
 # merge by closest dates
 # home team
-chk_match <- Match %>% 
-    select(home_team_api_id, date)
+home_chk_match <- Match %>% 
+    select(match_api_id, home_team_api_id, date)
 
-chk_diff <- full_join(chk_match, Team, by = c("home_team_api_id" = "team_api_id"))
+home_chk_diff <- left_join(home_chk_match, Team, by = c("home_team_api_id" = "team_api_id"))
 
-chk_diff[,2:3] <- lapply(chk_diff[,2:3], as.Date)
-chk_diff$diff <- abs(chk_diff$date.y - chk_diff$date.x)
+home_chk_diff[,3:4] <- lapply(home_chk_diff[,3:4], as.Date)
+home_chk_diff$diff <- abs(home_chk_diff$date.y - home_chk_diff$date.x)
 
-chk_diff <- chk_diff %>% 
+home_chk_diff <- home_chk_diff %>% 
     group_by(home_team_api_id, date.x) %>%
-    mutate(min_diff = min(diff))
+    mutate(min_diff = min(diff)) %>%
+    filter(diff == min_diff) %>%
+    ungroup
 
-chk_diff <- chk_diff %>%
-    filter(diff == min_diff)
-
-home_join_df <- chk_diff %>%
-    select(-diff, -min_diff)
+home_join_df <- home_chk_diff %>%
+    select(-diff, -min_diff) %>%
+    select(-date.x, -date.y)
 
 # away team
-chk_match <- Match %>% 
-    select(away_team_api_id, date)
+away_chk_match <- Match %>% 
+    select(match_api_id, away_team_api_id, date)
 
-chk_diff <- full_join(chk_match, Team, by = c("away_team_api_id" = "team_api_id"))
+away_chk_diff <- left_join(away_chk_match, Team, by = c("away_team_api_id" = "team_api_id"))
 
-chk_diff[,2:3] <- lapply(chk_diff[,2:3], as.Date)
-chk_diff$diff <- abs(chk_diff$date.y - chk_diff$date.x)
+away_chk_diff[,3:4] <- lapply(away_chk_diff[,3:4], as.Date)
+away_chk_diff$diff <- abs(away_chk_diff$date.y - away_chk_diff$date.x)
 
-chk_diff <- chk_diff %>% 
+away_chk_diff <- away_chk_diff %>% 
     group_by(away_team_api_id, date.x) %>%
-    mutate(min_diff = min(diff))
+    mutate(min_diff = min(diff)) %>%
+    filter(diff == min_diff) %>%
+    ungroup
 
-chk_diff <- chk_diff %>%
-    filter(diff == min_diff)
+away_join_df <- away_chk_diff %>%
+    select(-diff, -min_diff) %>%
+    select(-date.x, -date.y)
 
-away_join_df <- chk_diff %>%
-    select(-diff, -min_diff)
+# join away and home
+team_join <- inner_join(home_join_df, away_join_df, by = c("match_api_id"),suffix = c("_home","_away"))
+
 
 # join with match table
-Match <- Match %>%
-    inner_join(home_join_df, by = c("home_team_api_id" = "home_team_api_id", "date" = "date.x"), suffix = c("_home","_away"))%>%
-    inner_join(away_join_df, by = c("away_team_api_id" = "away_team_api_id", "date" = "date.x"), suffix = c("_home","_away")) %>%
-    select(-date.y_home, -date.y_away)
+match_cln <- Match %>%
+    inner_join(team_join, by = c("match_api_id", "home_team_api_id", "away_team_api_id"))
 
-# <Join Team data to Match>------------------------------------------------------------------------------------------
+# </Join Team data to Match>------------------------------------------------------------------------------------------
 
 
